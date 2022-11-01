@@ -1,0 +1,160 @@
+#build a function that returns a list of years of a given series losses for a given team
+def process(logs, losses_needed, weight, team, check):
+    logs_team = pd.concat([logs.loc[logs["home_team"] == team], logs.loc[logs["visiting_team"] == team]])
+    print(logs_team)
+
+    df = logs_team.reset_index()
+    df.sort_values("date", inplace = True)
+    df.reset_index(inplace = True, drop = True)
+    years = []
+    for i in range(0, len(df)):
+        year_string = str(df["date"][i])
+        year_concat = year_string[:4]
+        years.append(int(year_concat))
+    years = [*set(years)]
+    series_index = {"Year" : [], "Game Index" : []}
+    for year in years:
+        series_index["Year"].append(str(year))
+        games_arr = []
+        for game in df["date"]:
+            if str(game)[:4] == str(year):
+                games_arr.append(df.date[df.date == game].index.tolist())
+        series_index["Game Index"].append(games_arr)
+    count = 0
+    
+    tlosslist = [[], weight]
+    
+    lossdict = {"Year" : [], "Weight" : weight}
+    winlist = [[], weight]
+    for series in series_index["Game Index"]:
+        losses = 0
+        for i in series:
+            if df["home_team"][i[0]] == team:
+                if df["visiting_score"][i[0]] > df["home_score"][i[0]]:
+                    losses += 1
+            else:
+                if df["home_score"][i[0]] > df["visiting_score"][i[0]]:
+                    losses += 1
+            if losses == losses_needed:
+                tlosslist[0].append(series_index["Year"][count])
+
+            else:
+                winlist[0].append(series_index["Year"][count])
+
+        count += 1  
+
+    if check:
+        winlistint = [*set(winlist[0])]
+        winlist[0].clear()
+        for i in winlistint:
+            winlist[0].append(str(i))
+        winlist[0] = [x for x in winlist[0] if x not in tlosslist[0]]
+    
+    if check:
+        return winlist
+
+    else:
+        return tlosslist
+
+
+def wclosses(team):
+    logs = pyball.wild_card_logs()
+    return process(logs, 1, 1, team, False)
+
+def dslosses(team):
+    logs = pyball.division_series_logs()
+    return process(logs, 3, 2, team, False)
+
+def lcslosses(team):
+    logs = pyball.lcs_logs()
+    return process(logs, 4, 3, team, False)
+
+def wslosses(team):
+    logs = pyball.world_series_logs()
+    return process(logs, 4, 4, team, False)
+
+def wswins(team):
+    logs = pyball.world_series_logs()
+    return process(logs, 4, 5, team, True)
+#work with this some more
+def franchise_beginning(team):
+    for i in range(1903, 2022):
+        try:
+            teams = pyball.schedule_and_record(i, team)
+            return i
+        except:
+            continue   
+
+def wins(name):
+    teamslist = pyball.teams()
+    teamdf = teamslist.loc[(teamslist["franchID"] == name) & (teamslist["yearID"] > 1902)]
+    wins_arr = []
+    year_arr = []
+    for i in teamdf["W"]:
+        wins_arr.append(i)
+    for i in teamdf["yearID"]:
+        year_arr.append(i)
+    return wins_arr, year_arr
+
+def year_and_weight(team, beginning):
+    years = []
+    for i in range(beginning, 2022):
+        years.append(str(i))
+    wclist = wclosses(team)[0]
+    dslist = dslosses(team)[0]
+    lcslist = lcslosses(team)[0]
+    wslosslist = wslosses(team)[0]
+    wswinslist = wswins(team)[0]
+    postseasonlist = wclist + dslist + lcslist + wslosslist + wswinslist
+    missed_playoffs = [x for x in years if x not in postseasonlist]
+    
+    weightslist = []
+    for year in years:
+        if year in missed_playoffs:
+            weightslist.append("Missed Playoffs")
+        elif year in wclist:
+            weightslist.append("Lost in WC")
+        elif year in dslist:
+            weightslist.append("Lost in DS")
+        elif year in lcslist:
+            weightslist.append("Lost in CS")
+        elif year in wslosslist:
+            weightslist.append("Lost in WS")
+        else:
+            weightslist.append("Won WS")
+    return weightslist
+    
+    def create(teamabbr, teamname):
+    d = {"Year" : [], "Wins" : [], "Result" : []}
+    wins_arr, year_arr = wins(teamabbr)
+    d["Wins"] = wins_arr
+    d["Year"] = year_arr
+    for weight in year_and_weight(teamabbr, year_arr[0]):
+        d["Result"].append(weight)
+
+    colordict = {"Result" : ["Missed Playoffs", "Lost in WC", "Lost in DS", "Lost in CS", "Lost in WS", "Won WS"],
+             "Color" : ["rgba(0, 0, 0, 1)", "rgba(255, 156, 156, 1)", "rgba(120, 125, 55, 1)", "rgb(205, 127, 50)", "rgba(150, 150, 150, 1)", "rgba(255, 216, 0, 1)"]}
+    colors = []
+    for result in d["Result"]:
+        result_index = colordict["Result"].index(result)
+        result_color = colordict["Color"][result_index]
+        if result_color in colors:
+            continue
+        if result == "Missed Playoffs":
+            colors.append(colordict["Color"][0])
+        if result == "Lost in WC":
+            colors.append(colordict["Color"][1])
+        if result == "Lost in DS":
+            colors.append(colordict["Color"][2])
+        if result == "Lost in CS":
+            colors.append(colordict["Color"][3])
+        if result == "Lost in WS":
+            colors.append(colordict["Color"][4])
+        if result == "Won WS":
+            colors.append(colordict["Color"][5])
+    fig = px.bar(d, x = "Year", y = "Wins", color = "Result", color_discrete_sequence = colors, title = "Plotting Every " + teamname + "Franchise Season by Wins and Result")
+    fig.update_xaxes(categoryorder = "category ascending")
+    return fig
+    
+fig = create("HOU", "Houston Astros")
+fig.show()
